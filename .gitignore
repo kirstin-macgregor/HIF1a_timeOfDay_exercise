@@ -3,3 +3,5 @@
 *.rda
 *.html
 *out/
+*FKPN_old/
+*.txt
