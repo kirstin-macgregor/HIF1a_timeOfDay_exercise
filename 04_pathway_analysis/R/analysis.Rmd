@@ -1,0 +1,164 @@
+---
+title: "HIF1a mice transcriptomics in response to time of day exercise"
+subtitle: "Gene ontology analysis"
+author: "Kirstin MacGregor"
+date: "`r paste('Project start: January 04, 2023.', 'Last update:', format(Sys.time(), '%B %d, %Y'))`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_file = paste0(
+        xfun::sans_ext(input), '-', Sys.Date(), '.html'
+      ),
+      envir = globalenv()
+    )
+  })
+editor_options: 
+  chunk_output_type: console
+---
+<style>
+#TOC {
+  background: url("https://medarbetare.ki.se/sites/default/files/styles/article_full_width/public/qbank/ki_logo_liggande_exempel.jpg?itok=JTRhQLNk");
+  background-size: contain;
+  padding-top: 100px !important;
+  background-repeat: no-repeat;
+}
+</style>
+
+# Set up
+```{r setup, include=FALSE}
+source(here::here("./R/functions.R"))
+
+library(org.Mm.eg.db)
+
+dir.create(here::here("./out"), showWarnings = FALSE)
+```
+
+# Load data
+```{r}
+DE_results <- readRDS(file=  here::here("../02_diff_exp/out/DE_results.rda"))
+```
+
+# Run GSEA
+* Category= gene ontology 
+* Sub-category= biological processes & molecular function.
+```{r, warning=FALSE, message=FALSE}
+main_GSEA <- lapply(DE_results$main_effects[-1], GSEA_fun)
+genotype_GSEA <- lapply(DE_results$genotype_contrasts, GSEA_fun)
+ex_GSEA <- lapply(DE_results$ex_contrasts, GSEA_fun)
+zt_GSEA <- lapply(DE_results$zt_contrasts, GSEA_fun)
+```
+
+# Arrange output
+
+## Main effects
+```{r}
+main_GSEA$all_BP <- rbind(
+  main_GSEA$genotype$GSEA_BP_out,
+  main_GSEA$exercise$GSEA_BP_out,
+  main_GSEA$zt$GSEA_BP_out
+) |>
+  dplyr::mutate(comp = factor(comp, levels = c("genotype", "exercise", "zt")))
+
+main_GSEA$all_MF <- rbind(
+  main_GSEA$genotype$GSEA_MF_out,
+  main_GSEA$exercise$GSEA_MF_out,
+  main_GSEA$zt$GSEA_MF_out
+) |>
+  dplyr::mutate(comp = factor(comp, levels = c("genotype", "exercise", "zt")))
+```
+
+## Genotype
+```{r}
+genotype_GSEA$all_BP <- rbind(
+  genotype_GSEA$zt3_ex$GSEA_BP_out,
+  genotype_GSEA$zt15_ex$GSEA_BP_out,
+  genotype_GSEA$zt3_sed$GSEA_BP_out,
+  genotype_GSEA$zt15_sed$GSEA_BP_out
+) |>
+  dplyr::mutate(comp = factor(comp, levels = c("zt3_sed", "zt15_sed", "zt3_ex", "zt15_ex")))
+
+genotype_GSEA$all_MF <- rbind(
+  genotype_GSEA$zt3_ex$GSEA_MF_out,
+  genotype_GSEA$zt15_ex$GSEA_MF_out,
+  genotype_GSEA$zt3_sed$GSEA_MF_out,
+  genotype_GSEA$zt15_sed$GSEA_MF_out
+) |>
+  dplyr::mutate(comp = factor(comp, levels = c("zt3_sed", "zt15_sed", "zt3_ex", "zt15_ex")))
+```
+
+## Exercise
+```{r, warning=FALSE, message=FALSE}
+ex_GSEA$all_BP <- rbind(
+  ex_GSEA$zt3_wt$GSEA_BP_out,
+  ex_GSEA$zt15_wt$GSEA_BP_out,
+  ex_GSEA$zt3_ko$GSEA_BP_out,
+  ex_GSEA$zt15_ko$GSEA_BP_out
+) |>
+  dplyr::mutate(comp = factor(comp, levels = c("zt3_wt", "zt3_ko", "zt15_wt", "zt15_ko")))
+
+ex_GSEA$all_MF <- rbind(
+  ex_GSEA$zt3_wt$GSEA_MF_out,
+  ex_GSEA$zt15_wt$GSEA_MF_out,
+  ex_GSEA$zt3_ko$GSEA_MF_out,
+  ex_GSEA$zt15_ko$GSEA_MF_out
+) |>
+  dplyr::mutate(comp = factor(comp, levels = c("zt3_wt", "zt3_ko", "zt15_wt", "zt15_ko")))
+```
+
+## ZT
+```{r, warning=FALSE, message=FALSE}
+zt_GSEA$all_BP <- rbind(
+  zt_GSEA$wt_sed$GSEA_BP_out,
+  zt_GSEA$wt_ex$GSEA_BP_out,
+  zt_GSEA$ko_sed$GSEA_BP_out,
+  zt_GSEA$ko_ex$GSEA_BP_out
+) |>
+  dplyr::mutate(comp = factor(comp, levels = c("wt_sed", "wt_ex", "ko_sed", "ko_ex")))
+
+zt_GSEA$all_MF <- rbind(
+  zt_GSEA$wt_sed$GSEA_MF_out,
+  zt_GSEA$wt_ex$GSEA_MF_out,
+  zt_GSEA$ko_sed$GSEA_MF_out,
+  zt_GSEA$ko_ex$GSEA_MF_out
+) |>
+  dplyr::mutate(comp = factor(comp, levels = c("wt_sed", "wt_ex", "ko_sed", "ko_ex")))
+```
+
+# Save 
+```{r, eval= FALSE, warning=FALSE, message=FALSE}
+saveRDS(main_GSEA, here::here("./out/main_GSEA.rds"))
+saveRDS(genotype_GSEA, here::here("./out/genotype_GSEA.rds"))
+saveRDS(ex_GSEA, here::here("./out/ex_GSEA.rds"))
+saveRDS(zt_GSEA, here::here("./out/zt_GSEA.rds"))
+
+openxlsx::write.xlsx(list(BP = genotype_GSEA$all_BP, MF = genotype_GSEA$all_MF),
+  file = here::here("./out/genotype_GSEA.xlsx"),
+  keepNA = TRUE, na.string = ""
+)
+
+openxlsx::write.xlsx(list(BP = ex_GSEA$all_BP, MF = ex_GSEA$all_MF),
+  file = here::here("./out/ex_GSEA.xlsx"),
+  keepNA = TRUE, na.string = ""
+)
+
+openxlsx::write.xlsx(list(BP = zt_GSEA$all_BP, MF = zt_GSEA$all_MF),
+  file = here::here("./out/zt_GSEA.xlsx"),
+  keepNA = TRUE, na.string = ""
+)
+
+openxlsx::write.xlsx(list(BP = main_GSEA$all_BP, MF = main_GSEA$all_MF),
+  file = here::here("./out/main_effects_GSEA.xlsx"),
+  keepNA = TRUE, na.string = ""
+)
+```
+
+# Session info
+```{r}
+sessionInfo()
+```
+
