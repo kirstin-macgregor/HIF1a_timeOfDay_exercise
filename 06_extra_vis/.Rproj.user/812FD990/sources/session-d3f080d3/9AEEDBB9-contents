@@ -1,0 +1,616 @@
+---
+title: "HIF1a mice transcriptomics in response to time of day exercise"
+subtitle: "Pathway analysis"
+author: "Kirstin MacGregor"
+date: "`r paste('Project start: January 04, 2023.', 'Last update:', format(Sys.time(), '%B %d, %Y'))`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+knit: (function(input, ...) {
+      ),
+      envir = globalenv()
+    rmarkdown::render(
+      input,
+      output_file = paste0(
+        xfun::sans_ext(input), '-', Sys.Date(), '.html'
+editor_options: 
+  chunk_output_type: console
+---
+<style>
+#TOC {
+  background: url("https://staff.ki.se/sites/default/files/qbank/ki_digital_logo_rgb-custom20221016133426.jpg");
+  background-size: contain;
+  padding-top: 100px !important;
+  background-repeat: no-repeat;
+}
+</style>
+
+# Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+
+source(here::here("./R/functions.R"))
+
+library(org.Mm.eg.db)
+
+dir.create(here::here("./out"), showWarnings = FALSE)
+```
+
+# Load data
+```{r}
+#read GSEA data
+path <- (here::here("./../04_pathway_analysis/out/main_effects_GSEA.xlsx"))
+sheets <- openxlsx::getSheetNames(path)
+GSEA_main_effects <- lapply(sheets, openxlsx::read.xlsx, xlsxFile=path)
+names(GSEA_main_effects) <- sheets
+
+path <- (here::here("./../04_pathway_analysis/out/genotype_GSEA.xlsx"))
+sheets <- openxlsx::getSheetNames(path)
+GSEA_genotype <- lapply(sheets, openxlsx::read.xlsx, xlsxFile=path)
+names(GSEA_genotype) <- sheets
+
+path <- (here::here("./../04_pathway_analysis/out//zt_GSEA.xlsx"))
+sheets <- openxlsx::getSheetNames(path)
+GSEA_zt <- lapply(sheets, openxlsx::read.xlsx, xlsxFile=path)
+names(GSEA_zt) <- sheets
+
+path <- (here::here("./../04_pathway_analysis/out//ex_GSEA.xlsx"))
+sheets <- openxlsx::getSheetNames(path)
+GSEA_exercise <- lapply(sheets, openxlsx::read.xlsx, xlsxFile=path)
+names(GSEA_exercise) <- sheets
+
+#read and arrange DE data
+DE_out <- readRDS(file=  here::here('./../02_diff_exp/out/DE_results.rda'))
+
+# Tidy
+rm(path, sheets)
+```
+
+# Wrangle DE data
+```{r}
+DE_out$genotype_contrasts$all <- rbind(
+  DE_out$genotype_contrasts[[1]],
+  DE_out$genotype_contrasts[[2]],
+  DE_out$genotype_contrasts[[3]],
+  DE_out$genotype_contrasts[[4]]
+) |>
+  dplyr::mutate(
+    comp = dplyr::case_when(
+      comp == "zt3_sed" ~ "ZT3-sed",
+      comp == "zt15_sed" ~ "ZT15-sed",
+      comp == "zt3_ex" ~ "ZT3-ex",
+      comp == "zt15_ex" ~ "ZT15-ex"
+    ),
+    comp = factor(comp, levels = c("ZT3-sed", "ZT15-sed", "ZT3-ex", "ZT15-ex"))
+  )
+
+DE_out$zt_contrasts$all <- rbind(
+  DE_out$zt_contrasts[[1]],
+  DE_out$zt_contrasts[[2]],
+  DE_out$zt_contrasts[[3]],
+  DE_out$zt_contrasts[[4]]
+) |>
+  dplyr::mutate(
+    comp = dplyr::case_when(
+      comp == "wt_sed" ~ "WT-sed",
+      comp == "wt_ex" ~ "WT-ex",
+      comp == "ko_sed" ~ "KO-sed",
+      comp == "ko_ex" ~ "KO-ex"
+    ),
+    comp = factor(comp, levels = c("WT-sed", "WT-ex", "KO-sed", "KO-ex"))
+  )
+
+DE_out$ex_contrasts$all <- rbind(
+  DE_out$ex_contrasts[[1]],
+  DE_out$ex_contrasts[[2]],
+  DE_out$ex_contrasts[[3]],
+  DE_out$ex_contrasts[[4]]
+) |>
+  dplyr::mutate(
+    comp = dplyr::case_when(
+      comp == "zt3_wt" ~ "ZT3-WT",
+      comp == "zt3_ko" ~ "ZT3-KO",
+      comp == "zt15_wt" ~ "ZT15-WT",
+      comp == "zt15_ko" ~ "ZT15-KO"
+    ),
+    comp = factor(comp, levels = c("ZT3-WT", "ZT3-KO", "ZT15-WT", "ZT15-KO"))
+  )
+
+DE_out$main_effects$all <- rbind(
+  DE_out$main_effects[[2]],
+  DE_out$main_effects[[3]],
+  DE_out$main_effects[[4]]
+) |>
+  dplyr::mutate(comp = factor(comp, levels = c("genotype", "exercise", "zt")))
+```
+
+
+```{r}
+dat_temp <- DE_out$genotype_contrasts$all |>
+  dplyr::mutate(
+    "logFC direction" = dplyr::case_when(
+      logFC < 0 ~ "down",
+      logFC > 0 ~ "up"),
+    `logFC direction` = factor(`logFC direction`, levels = c("up", "down"))) |> 
+  dplyr::filter(FDR < 0.1)
+
+# Plot
+bar_N_DE_plot <-
+ggplot2::ggplot(data= dat_temp, ggplot2::aes(x = comp, fill = `logFC direction`)) +
+  ggplot2::geom_bar(stat = "count")+
+  ggplot2::theme_bw()+ 
+  ggplot2::coord_flip() + 
+  ggplot2::scale_fill_manual(values = c("midnightblue", "darkred"))+
+  ggplot2::xlab("group")+
+  ggplot2::ylab("Differentially expressed genes (N)")+
+  ggplot2::theme(axis.text.x = (ggplot2::element_text(angle = 45, vjust = 1, hjust = 1)),
+                 axis.text = ggplot2::element_text(size = 15),
+                 axis.title = ggplot2::element_text(size = 15),
+                 legend.text = ggplot2::element_text(size = 15),
+                 legend.position = "right")
+
+# Save
+plot_save_function("bar_N_DEGs.pdf", bar_N_DE_plot, here::here("./out"), width= 7, height= 4)
+
+# Clean up
+rm(bar_N_DE_plot)
+```
+
+# Plot specific GSEA pathways
+* Dot plots for specific GSEA pathways.
+```{r}
+##----------------------
+## Rhythmic behaviour
+##----------------------
+
+GSEA_rhythmic_behaviour_zt <- plot_POI_fun(GSEA_zt$`Sheet 1`,
+                                           pathway = "GOBP_RHYTHMIC_BEHAVIOR",
+                                           title= "GSEA: Rhythmic behaviour. Comparison: zt15 vs zt3")
+
+plot_save_function(filename= "GSEA_rhythmic_behaviour_zt.pdf",
+                   plot= GSEA_rhythmic_behaviour_zt,
+                   save_path= here::here("./data/04_visualisation/pathway_of_interest"),
+                   width = 7,
+                   height= 2.5)
+
+##----------------------
+## Hypoxia
+##----------------------
+GSEA_hypoxia_main <- plot_POI_fun(GSEA_main_effects$`Sheet 1`,
+                                           pathway= "GOBP_RESPONSE_TO_HYPEROXIA",
+                                           title= "GSEA: Response to hyperoxia. Comparison: main effects")
+GSEA_hypoxia_zt <- plot_POI_fun(GSEA_zt$`Sheet 1`,
+                                           pathway= "GOBP_RESPONSE_TO_HYPEROXIA",
+                                           title= "GSEA: Response to hyperoxia. Comparison: zt15 vs zt3")
+
+GSEA_hypoxia_genotype <- plot_POI_fun(GSEA_genotype$BP,
+                                           pathway= "GOBP_RESPONSE_TO_HYPEROXIA",
+                                           title= "GSEA: Response to hyperoxia. Comparison: ko vs wt")
+GSEA_hypoxia_exercise <- plot_POI_fun(GSEA_exercise$`Sheet 1`,
+                                           pathway= "GOBP_RESPONSE_TO_HYPEROXIA",
+                                           title= "GSEA: Response to hyperoxia. Comparison: ex vs sed")
+
+
+plot_list_save_function(list(GSEA_hypoxia_main= GSEA_hypoxia_main, 
+                        GSEA_hypoxia_zt = GSEA_hypoxia_zt,
+                        GSEA_hypoxia_genotype = GSEA_hypoxia_genotype,
+                        GSEA_hypoxia_exercise = GSEA_hypoxia_exercise),
+                        save_ch= "",
+                        save_path= here::here("./data/04_visualisation/pathway_of_interest"),
+                        width= 7, height= 2.5)
+
+```
+
+
+# Plot specific target genes
+```{r}
+##----------------------
+## Core clock genes
+##----------------------
+target <- c("Arntl", "Ciart",  "Clock", "Cry1",  "Dbp", "Nr1d1", "Npas2","Nr1d2", "Nr1d2", "Per1",  "Per3",
+              "Nfil3")
+
+clock_plots <- list(clock_zt_plot= GoI_logFC_geom_error_fun(data= DE_out$zt_contrasts$all,
+                                                          title= "Core clock genes:
+zt15 vs zt3",
+                                                          xlab= "group", ncol=5),
+                   clock_exercise_plot= GoI_logFC_geom_error_fun(data= DE_out$ex_contrasts$all,
+                                                       title= "Core clock genes:
+ex vs sed",
+                                                       xlab= "group", ncol=5),
+                   clock_genotype_plot = GoI_logFC_geom_error_fun(data= DE_out$genotype_contrasts$all,
+                                                       title= "Core clock genes:
+ko vs wt",
+                                                       xlab= "group", ncol=5),
+                   clock_main_effects_plot = GoI_logFC_geom_error_fun(data= DE_out$main_effects$all, 
+                                                           title= "Core clock genes:
+main effects", 
+                                                           xlab= "main effect", ncol=5)
+                   )
+
+
+plot_list_save_function(clock_plots,
+                        save_chr= "",
+                        save_path= here::here("./data/04_visualisation/gene_of_interest/clock"),
+                        width= 7,
+                        height= 4)
+
+##----------------------
+## OXidative phosphorylation - top 10 FDR (across all groups)
+##----------------------
+target <- get_top_genes_in_ToI(DE_out$zt_contrasts$all, GO_term = "GO:0006119", n=10)
+ox_phos_zt_plot <- GoI_logFC_geom_error_fun(data= DE_out$zt_contrasts$all, 
+                                                           title= "Oxidative phoshorylation (GO:0006119):
+zt15 vs zt3",
+                                                           xlab= "group", ncol=5)
+                     
+
+target <- get_top_genes_in_ToI(DE_out$genotype_contrasts$all, GO_term = "GO:0006119", n=10)                    
+ox_phos_genotype_plot <- GoI_logFC_geom_error_fun(data= DE_out$genotype_contrasts$all,
+                                                         title= "Oxidative phoshorylation (GO:0006119):
+ko vs wt",
+                                                         xlab= "group", ncol=5)
+
+plot_list_save_function(list(ox_phos_zt_plot= ox_phos_zt_plot,
+                             ox_phos_genotype_plot = ox_phos_genotype_plot),
+                        save_chr= "",
+                        save_path= here::here("./data/04_visualisation/gene_of_interest/oxphos"),
+                        width= 7,
+                        height= 4)
+
+
+##----------------------
+## Top 3 GO pathways for genotype main effect
+##----------------------
+
+target <- get_top_genes_in_ToI(DE_out$zt_contrasts$all, GO_term = "GO:0006119", n=10)
+main_geno_dat <- DE_out$main_effects$all |> dplyr::filter(comp== "genotype")
+
+ox_phos_main_genotype_plot <- GoI_logFC_geom_error_fun(data= main_geno_dat , 
+                                                           title= "Oxidative phoshorylation
+(GO:0006119)",
+                                                           xlab= "group", ncol=5)
+
+target <- get_top_genes_in_ToI(DE_out$zt_contrasts$all, GO_term = "GO:0009060", n=10)
+aer_resp_main_genotype_plot <- GoI_logFC_geom_error_fun(data= main_geno_dat , 
+                                                           title= "Aerobic respiration 
+(GO:0009060)",
+                                                           xlab= "group", ncol=5)
+
+target <- get_top_genes_in_ToI(DE_out$zt_contrasts$all, GO_term = "GO:0022904", n=10)
+resp_ETC_main_genotype_plot <- GoI_logFC_geom_error_fun(data= main_geno_dat , 
+                                                           title= "Respiratory ETC
+(GO:0022904)",
+                                                           xlab= "group", ncol=5)
+ggpubr::ggarrange(ox_phos_main_genotype_plot,aer_resp_main_genotype_plot, resp_ETC_main_genotype_plot,
+                  common.legend = TRUE,
+                  legend = "bottom",
+                  ncol=3)
+
+
+##----------------------
+## HIF1a
+##----------------------
+target <- c("Hif1a")
+
+HIF1a_main_effects_plot <- GoI_logFC_geom_error_fun(data= DE_out$main_effects$all,
+                                                    title= "Hif1a:
+main effects",
+                                                    xlab= "main effect",
+                                                    ncol=5) 
+
+HIF1a_zt_plot <- GoI_logFC_geom_error_fun(data= DE_out$zt_contrasts$all,
+                         title= "HIF1a:
+zt15 vs zt3",
+                         xlab= "group",
+                         ncol=5)
+
+HIF1a_genotype_plot <- GoI_logFC_geom_error_fun(data= DE_out$genotype_contrasts$all,
+                         title= "HIF1a:
+ko vs wt",
+                         xlab= "group",
+                         ncol=5)
+
+HIF1a_exercise_plot <- GoI_logFC_geom_error_fun(data= DE_out$ex_contrasts$all,
+                         title= "HIF1a:
+ex vs sed",
+                         xlab= "group",
+                         ncol=5) 
+
+plot_list_save_function(list(HIF1a_main_effects_plot= HIF1a_main_effects_plot,
+                             HIF1a_zt_plot = HIF1a_zt_plot,
+                             HIF1a_genotype_plot= HIF1a_genotype_plot,
+                             HIF1a_exercise_plot = HIF1a_exercise_plot),
+                        save_chr= "",
+                        save_path= here::here("./data/04_visualisation/gene_of_interest/HIF1a"),
+                        width= 7,
+                        height= 2.5)
+
+##----------------------
+## Response to hyperoxia (Top 10 across all groups)
+##----------------------
+target <- get_top_genes_in_ToI(DE_out$zt_contrasts$all, GO_term = "GO:0001666", n=10)
+hyperoxia_zt_plot <- GoI_logFC_geom_error_fun(data= DE_out$zt_contrasts$all, 
+                                                           title= "Response to hypoxia (GO:0001666): 
+zt15 vs zt3",
+                                                           xlab= "group", ncol=5)
+                     
+
+target <- get_top_genes_in_ToI(DE_out$genotype_contrasts$all, GO_term = "GO:0001666", n=10)                    
+hyperoxia_genotype_plot <- GoI_logFC_geom_error_fun(data= DE_out$genotype_contrasts$all,
+                                                         title= "Response to hypoxia (GO:0001666):
+ko vs wt",
+                                                         xlab= "group", ncol=5)
+
+
+plot_list_save_function(list(hyperoxia_zt_plot= hyperoxia_zt_plot,
+                             hyperoxia_genotype_plot = hyperoxia_genotype_plot),
+                        save_chr= "",
+                        save_path= here::here("./data/04_visualisation/gene_of_interest/hyperoxia"),
+                        width= 7,
+                        height= 4)
+
+##----------------------
+## Mitochondrial respiratory chain complex assembly ("GO:0033108")
+##----------------------
+
+target <- get_top_genes_in_ToI(DE_out$zt_contrasts$all, GO_term = "GO:0033108", n=10)
+mito_RCC_assem_zt_plot <- GoI_logFC_geom_error_fun(data= DE_out$zt_contrasts$all, 
+                                                           title= "Mitochondrial respiratory chain complex assembly (GO:0033108):
+zt15 vs zt3",
+                                                           xlab= "group", ncol=5)
+
+target <- get_top_genes_in_ToI(DE_out$genotype_contrasts$all, GO_term = "GO:0033108", n=10)                    
+mito_RCC_assem_genotype_plot <- GoI_logFC_geom_error_fun(data= DE_out$genotype_contrasts$all,
+                                                         title= "Mitochondrial respiratory chain complex assembly (GO:0033108):
+ko vs wt",
+                                                         xlab= "group", ncol=5)
+
+plot_list_save_function(list(mito_RCC_assem_zt_plot= mito_RCC_assem_zt_plot, 
+                             mito_RCC_assem_genotype_plot = mito_RCC_assem_genotype_plot),
+                        save_chr= "",
+                        save_path= here::here("./data/04_visualisation/gene_of_interest/mitochondria"),
+                        width= 7,
+                        height= 4)
+
+##----------------------
+## Glycolysis ("GO:0033108")
+##----------------------
+library(ggplot2)
+target <- get_top_genes_in_ToI(DE_out$zt_contrasts$all, GO_term = "GO:0006096", n=10)
+glycolysis_ZT_plot <- GoI_logFC_geom_error_fun(data= DE_out$zt_contrasts$all, 
+                                                           title= "Glycolytic process (GO:0006096):
+zt15 vs zt3",
+                                                           xlab= "group", ncol=5)
+
+target <- get_top_genes_in_ToI(DE_out$genotype_contrasts$all, GO_term = "GO:0006096", n=10)                    
+glycolysis_genotype_plot <- GoI_logFC_geom_error_fun(data= DE_out$genotype_contrasts$all,
+                                                         title= "Glycolytic process (GO:0006096): 
+ko vs wt",
+                                                         xlab= "group", ncol=5)
+
+plot_list_save_function(list(mito_RCC_assem_zt_plot= mito_RCC_assem_zt_plot, 
+                             mito_RCC_assem_genotype_plot = mito_RCC_assem_genotype_plot),
+                        save_chr= "",
+                        save_path= here::here("./data/04_visualisation/gene_of_interest/mitochondria"),
+                        width= 7,
+                        height= 4)
+
+
+
+##----------------------
+## ATP synthesis coupled electron transport ("GO:0042773")
+##----------------------
+target <- get_top_genes_in_ToI(DE_out$zt_contrasts$all, GO_term = "GO:0042773", n=10)
+ATP_syn_ET_zt_plot <- GoI_logFC_geom_error_fun(data= DE_out$zt_contrasts$all, 
+                                                           title= "ATP synthesis coupled electron transport (GO:0042773):
+zt15 vs zt3",
+                                                           xlab= "group", ncol=5)
+
+target <- get_top_genes_in_ToI(DE_out$genotype_contrasts$all, GO_term = "GO:0042773", n=10)                    
+ATP_syn_ET_genotype_plot <- GoI_logFC_geom_error_fun(data= DE_out$genotype_contrasts$all,
+                                                         title= "ATP synthesis coupled electron transport (GO:0042773):
+ko vs wt",
+                                                         xlab= "group", ncol=5)
+
+plot_list_save_function(list(ATP_syn_ET_zt_plot= ATP_syn_ET_zt_plot,
+                             ATP_syn_ET_genotype_plot = ATP_syn_ET_genotype_plot),
+                        save_chr= "",
+                        save_path= here::here("./data/04_visualisation/gene_of_interest/mitochondria"),
+                        width= 7,
+                        height= 4)
+
+##----------------------
+## Respiratory electron transport chain (GO:0022904)
+##----------------------
+target <- get_top_genes_in_ToI(DE_out$zt_contrasts$all, GO_term = "GO:0022904", n=10)
+resp_ETC_zt_plot <- GoI_logFC_geom_error_fun(data= DE_out$zt_contrasts$all, 
+                                                           title= "Respiratory electron transport chain (GO:0022904):
+zt15 vs zt3",
+                                                           xlab= "group", ncol=5)
+
+target <- get_top_genes_in_ToI(DE_out$genotype_contrasts$all, GO_term = "GO:0022904", n=10)                    
+resp_ETC_genotype_plot <- GoI_logFC_geom_error_fun(data= DE_out$genotype_contrasts$all,
+                                                         title= "Respiratory electron transport chain (GO:0022904):
+ko vs wt",
+                                                         xlab= "group", ncol=5)
+
+plot_list_save_function(list(resp_ETC_zt_plot= resp_ETC_zt_plot,
+                             resp_ETC_genotype_plot = resp_ETC_genotype_plot),
+                        save_chr= "",
+                        save_path= here::here("./data/04_visualisation/gene_of_interest/mitochondria"),
+                        width= 7,
+                        height= 4)
+
+```
+
+## N differentialy regulated genes 
+```{r}
+##----------------------
+## Oxidative phosphorylation
+##----------------------
+oxphos_genotype_data <- count_DE_genes_in_ToI(data = DE_out$genotype_contrasts$all, GO_term = "GO:0006119")
+oxphos_genotype_data <- oxphos_genotype_data |> dplyr::mutate(pathway = "Oxidative phosphorylation")
+
+##----------------------
+## aerobic respiration
+##----------------------
+aerRes_genotype_data <- count_DE_genes_in_ToI(data = DE_out$genotype_contrasts$all, GO_term = "GO:0009060")
+aerRes_genotype_data <- aerRes_genotype_data |> dplyr::mutate(pathway = "Aerobic respiration")
+
+##----------------------
+## Cellular respiration
+##----------------------
+cellResp_genotype_data <- count_DE_genes_in_ToI(data = DE_out$genotype_contrasts$all, GO_term = "GO:0045333")
+cellResp_genotype_data <- cellResp_genotype_data |> dplyr::mutate(pathway = "Cellular respiration")
+
+##----------------------
+## mitochondrial respiration
+##----------------------
+mito_RCC_assem_genotype_data <- count_DE_genes_in_ToI(data = DE_out$genotype_contrasts$all, GO_term = "GO:0033108")
+mito_RCC_assem_genotype_data <- mito_RCC_assem_genotype_data |> dplyr::mutate(pathway = "Mito. respir. chain complex assembly")
+
+##----------------------
+## ATP syntehsis ETC
+##----------------------
+ATP_syn_ET_genotype_data <- count_DE_genes_in_ToI(data = DE_out$genotype_contrasts$all, GO_term = "GO:0042773")
+ATP_syn_ET_genotype_data <- ATP_syn_ET_genotype_data |> dplyr::mutate(pathway = "ATP synthesis coupled electron")
+
+##----------------------
+## respiratory ETC
+##----------------------
+resp_ETC_genotype_data <- count_DE_genes_in_ToI(data = DE_out$genotype_contrasts$all, GO_term = "GO:0022904")
+resp_ETC_genotype_data <- resp_ETC_genotype_data |> dplyr::mutate(pathway = "Respiratory electron transport")
+
+## Plot 
+rm(plot_dat)
+plot_dat <- rbind(oxphos_genotype_data, 
+                  aerRes_genotype_data,
+                  cellResp_genotype_data,
+                  mito_RCC_assem_genotype_data,
+                  ATP_syn_ET_genotype_data,
+                  resp_ETC_genotype_data)
+
+plot_dat <- plot_dat |> 
+  dplyr::mutate(comp = factor(comp, levels = c("ZT3-sed", "ZT3-ex", "ZT15-sed", "ZT15-ex")),
+                direction = dplyr::case_when(is.na(direction) ~"down",
+                                             !is.na(direction) ~"up"),
+                direction= factor(direction, levels = c("up", "down", "ns")))
+
+
+out <- plot_DE_genes_in_ToI(plot_dat)
+
+# Save
+plot_save_function("bar_N_DE_per_pathway.pdf", out, here::here("./out/"), width= 6, height= 8)
+
+# Tidy 
+rm(oxphos_genotype_data, aerRes_genotype_data, cellResp_genotype_data, mito_RCC_assem_genotype_data, ATP_syn_ET_genotype_data, resp_ETC_genotype_data, out)
+
+```
+
+# Mannose 6 phosphate
+```{r}
+GO_terms <- list("glucose_metabolic_process" = list ("term" = "GO:0006006", "name" = "glucose_metabolic_process"),
+     "fructose_metabolic_process" = list ("term" = "GO:0006000", "name" = "fructose_metabolic_process"),
+     "mannose_metabolic_process" = list ("term" = "GO:0006013", "name" = "mannose_metabolic_process"),
+     "glucose_catabaolic_process_to_lactate" = list ("term" = "GO:0006089", "name" = "glucose_catabaolic_process_to_lactate"),
+    "mannosylation" = list ("term" = "GO:0097502", "name" = "mannosylation"))
+
+GO_terms <- lapply(GO_terms, function(data){
+    out <- GO_ToI_fun(data$term)
+    out |> 
+      as.data.frame() |> 
+      dplyr::rename(gene_id = out) |> 
+      dplyr::mutate(pathway = data$name)
+}
+)
+
+GO_terms = do.call("rbind", GO_terms)
+rownames(GO_terms) = NULL
+
+volcano_subset_fun <- function(data){
+
+data <- data |> 
+ as.data.frame() |>
+    dplyr::filter(
+      gene_id %in% GO_terms$gene_id
+    ) |> 
+  dplyr::left_join(GO_terms, by = "gene_id") |> 
+  dplyr::mutate(lab = dplyr::case_when(
+    FDR < 0.1 ~ pathway,
+    FDR > 0.1 ~"ns",
+    TRUE ~"ns"
+  )) |> 
+  dplyr::distinct()
+
+   ggplot2::ggplot(data = data, ggplot2::aes(y = -log10(pvalue), x = logFC)) +
+      ggplot2::geom_point(data = data |> dplyr::filter(lab != "ns"), ggplot2::aes(fill = lab, shape = lab), colour = "black") +
+      ggplot2::geom_point(data = data |> dplyr::filter(lab == "ns"), colour = "black", fill = "grey30", shape= 21, alpha = 0.6) +
+      ggplot2::scale_shape_manual(values = c(22, 23, 24, 25, 22)) +
+      ggplot2::geom_vline(xintercept = 0, linetype = "dashed") +
+      ggplot2::theme_bw() +
+     ggplot2::facet_wrap(~comp)+
+      ggplot2::ggtitle(unique(data$main_effect)) +
+      ggrepel::geom_text_repel(data = data |> dplyr::filter(FDR < 0.1), ggplot2::aes(label = gene_name))+
+   ggplot2::theme(legend.position = "right")
+ }
+
+
+volcano_main <- volcano_subset_fun(DE_out$main_effects$genotype)
+
+temp_dat <- rbind(DE_out$genotype_contrasts$zt3_ex,
+                 # DE_out$genotype_contrasts$zt15_ex,
+                  DE_out$genotype_contrasts$zt3_sed#,
+                #  DE_out$genotype_contrasts$zt15_sed
+                  )
+
+volcano_genotype <- volcano_subset_fun(temp_dat)
+
+ggplot2::ggsave(plot = volcano_main, filename = "volcano_glucose_mannose_main_genotype.pdf", path = here::here("./out/"), height = 4, width = 5)
+
+ggplot2::ggsave(plot = volcano_genotype, filename = "volcano_glucose_mannose_genotype.pdf", path = here::here("./out/"), height = 4, width = 8)
+```
+
+# Look at specific genes for Amy
+```{r}
+
+View(DE_out$main_effects$genotype)
+mannose_genes_plot_fun <- function(data){
+
+data <- data |> 
+ as.data.frame() |>
+    dplyr::filter(
+      gene_name %in% c("Mpi", "Idh1", "Pdhx", "Pmm2", "Gpi1", "G6pdxx")) |> 
+  dplyr::distinct()
+
+ggplot2::ggplot(data = data, ggplot2::aes(y = gene_name, x = logFC)) +
+        ggplot2::geom_segment(ggplot2::aes(x = 0, xend = logFC, y = gene_name, yend = gene_name), linewidth = 0.8)+
+      ggplot2::geom_point(ggplot2::aes(fill = FDR < 0.1, size = -FDR), colour = "black", shape = 21) +
+  ggplot2::scale_fill_manual(values = c("grey40", "darkred"))+
+      ggplot2::geom_vline(xintercept = 0, linetype = "dashed") +
+      ggplot2::theme_bw() +
+  ggplot2::facet_wrap(~comp)+
+      ggplot2::ggtitle(unique(data$main_effect)) +
+   ggplot2::theme(legend.position = "right")
+}
+
+mannose_genes_main <- mannose_genes_plot_fun(DE_out$main_effects$genotype)
+
+
+temp_dat <- rbind(DE_out$genotype_contrasts$zt3_ex,
+                  DE_out$genotype_contrasts$zt15_ex,
+                  DE_out$genotype_contrasts$zt3_sed,
+                  DE_out$genotype_contrasts$zt15_sed
+                  )
+
+mannose_genes_genotype <- mannose_genes_plot_fun(temp_dat)
+
+ggplot2::ggsave(plot = mannose_genes_main, filename = "point_mannose_main_genotype.pdf", path = here::here("./out/"), height = 4, width = 5)
+
+ggplot2::ggsave(plot = mannose_genes_genotype, filename = "point_mannose_genotype.pdf", path = here::here("./out/"), height = 6, width = 7)
+
+```
+

@@ -1,0 +1,28 @@
+{
+    "id": "F52E9312",
+    "path": "C:/Users/kirmac/OneDrive - Karolinska Institutet/Kirstin/Projects/2022_01, HIF1a-KO clock execise/Analysis/transcriptomics_project/06_extra_vis/R/analysis.Rmd",
+    "project_path": "R/analysis.Rmd",
+    "type": "r_markdown",
+    "hash": "501021752",
+    "contents": "",
+    "dirty": false,
+    "created": 1727073432786.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "574,0",
+        "scrollLine": "559",
+        "last_setup_crc32": "",
+        "chunk_output_type": "console"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1727073619,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1727073619337,
+    "read_only": false,
+    "read_only_alternatives": []
+}
