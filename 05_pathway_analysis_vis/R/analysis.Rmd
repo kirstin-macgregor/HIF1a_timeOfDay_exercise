@@ -1,0 +1,162 @@
+---
+title: "HIF1a mice transcriptomics in response to time of day exercise"
+subtitle: "Pathway analysis"
+author: "Kirstin MacGregor"
+date: "`r paste('Project start: January 04, 2023.', 'Last update:', format(Sys.time(), '%B %d, %Y'))`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_file = paste0(
+        xfun::sans_ext(input), '-', Sys.Date(), '.html'
+      ),
+      envir = globalenv()
+    )
+  })
+editor_options: 
+  chunk_output_type: console
+---
+<style>
+#TOC {
+  background: url("https://staff.ki.se/sites/default/files/qbank/ki_digital_logo_rgb-custom20221016133426.jpg");
+  background-size: contain;
+  padding-top: 100px !important;
+  background-repeat: no-repeat;
+}
+</style>
+
+# Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+
+source(here::here("./R/functions.R"))
+
+library(org.Mm.eg.db)
+
+dir.create(here::here("./out"), showWarnings = FALSE)
+```
+
+# Load data
+```{r}
+zt_GSEA <- readRDS(here::here("./../04_pathway_analysis/out/zt_GSEA.rds"))
+ex_GSEA <- readRDS(here::here("./../04_pathway_analysis/out/ex_GSEA.rds"))
+genotype_GSEA <- readRDS(here::here("./../04_pathway_analysis/out/genotype_GSEA.rds"))
+main_GSEA <- readRDS(here::here("./../04_pathway_analysis/out/main_GSEA.rds"))
+```
+
+# Dot plots
+```{r, warning=FALSE, message=FALSE}
+genotype_GSEA$all_BP <-  genotype_GSEA$all_BP |> 
+    dplyr::mutate(comp = dplyr::case_when(
+      comp == "zt3_ex" ~ "ZT3-ex",
+      comp == "zt15_ex" ~"ZT15-ex",
+      comp == "zt3_sed" ~"ZT3-sed",
+      comp == "zt15_sed" ~"ZT15-sed"
+      ),
+      comp = factor(comp, levels = c("ZT3-sed", "ZT3-ex", "ZT15-sed", "ZT15-ex")))
+
+zt_GSEA$all_BP <-  zt_GSEA$all_BP |> 
+    dplyr::mutate(comp = dplyr::case_when(
+      comp == "wt_sed" ~ "WT-sed",
+      comp == "wt_ex" ~"WT-ex",
+      comp == "ko_sed" ~"KO-sed",
+      comp == "ko_ex" ~"KO-ex"
+      ),
+      comp = factor(comp, levels = c("WT-sed", "WT-ex", "KO-sed", "KO-ex")))
+
+      
+#dot plots
+GSEA_plots_BP <- list(zt3_vs_zt15= plot_top_GSEA(zt_GSEA[[5]], title= "GSEA- zt15 vs zt3"),
+                   ex_vs_sed= plot_top_GSEA(ex_GSEA[[5]], title= "GSEA- ex vs sed"),
+                   ko_vs_wt = plot_top_GSEA(genotype_GSEA[[5]], title= "GSEA- ko vs wt"),
+                   main_effects = plot_top_GSEA(main_GSEA[[4]], title= "GSEA- main effects"))
+
+GSEA_plots_MF <- list(zt3_vs_zt15= plot_top_GSEA(zt_GSEA[[6]], title= "GSEA- zt15 vs z3"),
+                   ex_vs_sed= plot_top_GSEA(ex_GSEA[[6]], title= "GSEA- ex vs sed"),
+                   ko_vs_wt = plot_top_GSEA(genotype_GSEA[[6]], title= "GSEA- ko vs wt"),
+                   main_effects = plot_top_GSEA(main_GSEA[[5]], title= "GSEA- main effects"))
+
+plot_list_save_function(GSEA_plots_BP, save_chr= "_GSEA_dot_plot_BP", save_path= here::here("./out"), width= 9, height= 6)
+plot_list_save_function(GSEA_plots_MF, save_chr= "_GSEA_dot_plot_MF", save_path= here::here("./out"), width= 7, height= 7)
+```
+
+## Upset plots
+```{r, warning=FALSE, message=FALSE}
+#arrange data as lists
+genotype_GSEA_BP_upset <- list(zt3_ex= genotype_GSEA$zt3_ex$GSEA_BP_out,
+                         zt15_ex= genotype_GSEA$zt15_ex$GSEA_BP_out,
+                         zt3_sed= genotype_GSEA$zt3_sed$GSEA_BP_out,
+                         zt15_sed= genotype_GSEA$zt15_sed$GSEA_BP_out)
+
+genotype_GSEA_MF_upset <- list(zt3_ex= genotype_GSEA$zt3_ex$GSEA_MF_out,
+                         zt15_ex= genotype_GSEA$zt15_ex$GSEA_MF_out,
+                         zt3_sed= genotype_GSEA$zt3_sed$GSEA_MF_out,
+                         zt15_sed= genotype_GSEA$zt15_sed$GSEA_MF_out)
+
+ex_GSEA_BP_upset <- list(zt3_wt= ex_GSEA$zt3_wt$GSEA_BP_out,
+                         zt15_wt= ex_GSEA$zt15_wt$GSEA_BP_out,
+                         zt3_ko= ex_GSEA$zt3_ko$GSEA_BP_out,
+                         zt15_ko= ex_GSEA$zt15_ko$GSEA_BP_out)
+
+ex_GSEA_MF_upset <- list(zt3_wt= ex_GSEA$zt3_wt$GSEA_MF_out,
+                         zt15_wt= ex_GSEA$zt15_wt$GSEA_MF_out,
+                         zt3_ko= ex_GSEA$zt3_ko$GSEA_MF_out,
+                         zt15_ko= ex_GSEA$zt15_ko$GSEA_MF_out)
+
+zt_GSEA_BP_upset <- list(wt_sed= zt_GSEA$wt_sed$GSEA_BP_out,
+                         wt_ex= zt_GSEA$wt_ex$GSEA_BP_out,
+                         ko_sed= zt_GSEA$ko_sed$GSEA_BP_out,
+                         ko_ex= zt_GSEA$ko_ex$GSEA_BP_out)
+
+zt_GSEA_MF_upset <- list(wt_sed= zt_GSEA$wt_sed$GSEA_MF_out,
+                         wt_ex= zt_GSEA$wt_ex$GSEA_MF_out,
+                         ko_sed= zt_GSEA$ko_sed$GSEA_MF_out,
+                         ko_ex= zt_GSEA$ko_ex$GSEA_MF_out)
+
+#upset plots
+ex_GSEA_BP_upset <- lapply(ex_GSEA_BP_upset, upset_plot_GSEA_dat_fun) #arrange data as list
+ex_GSEA_BP_upset <- upset_gg(ex_GSEA_BP_upset)
+ex_GSEA_BP_upset <- ex_GSEA_BP_upset$upset
+ex_GSEA_BP_upset
+
+ex_GSEA_MF_upset <- lapply(ex_GSEA_MF_upset, upset_plot_GSEA_dat_fun) #arrange data as list
+ex_GSEA_MF_upset <- upset_gg(ex_GSEA_MF_upset)
+ex_GSEA_MF_upset <- ex_GSEA_MF_upset$upset
+
+genotype_GSEA_BP_upset <- lapply(genotype_GSEA_BP_upset, upset_plot_GSEA_dat_fun) #arrange data as list
+genotype_GSEA_BP_upset <- upset_gg(genotype_GSEA_BP_upset)
+genotype_GSEA_BP_upset <- genotype_GSEA_BP_upset$upset
+genotype_GSEA_BP_upset
+
+genotype_GSEA_MF_upset <- lapply(genotype_GSEA_MF_upset, upset_plot_GSEA_dat_fun) #arrange data as list
+genotype_GSEA_MF_upset <- upset_gg(genotype_GSEA_MF_upset)
+genotype_GSEA_MF_upset <- genotype_GSEA_MF_upset$upset
+
+zt_GSEA_BP_upset <- lapply(zt_GSEA_BP_upset, upset_plot_GSEA_dat_fun) #arrange data as list
+zt_GSEA_BP_upset <- upset_gg(zt_GSEA_BP_upset)
+zt_GSEA_BP_upset <- zt_GSEA_BP_upset$upset
+zt_GSEA_BP_upset
+
+zt_GSEA_MF_upset <- lapply(zt_GSEA_MF_upset, upset_plot_GSEA_dat_fun) #arrange data as list
+zt_GSEA_MF_upset <- upset_gg(zt_GSEA_MF_upset)
+zt_GSEA_MF_upset <- zt_GSEA_MF_upset$upset
+
+upset_list <- list(ex_vs_sed_GSEA_upset_BP= ex_GSEA_BP_upset,
+                   ex_vs_sed_GSEA_upset_MF= ex_GSEA_MF_upset,
+                   ko_vs_wt_GSEA_upset_BP= genotype_GSEA_BP_upset,
+                   ko_vs_wt_GSEA_upset_MF= genotype_GSEA_MF_upset,
+                   zt3_vs_zt15_GSEA_upset_BP= zt_GSEA_BP_upset,
+                   zt3_vs_zt15_GSEA_upset_MF= zt_GSEA_MF_upset)
+
+plot_list_save_function(upset_list, save_chr= "", save_path= here::here("./out"), width= 8, height= 10)
+```
+
+# Session info
+```{r}
+sessionInfo()
+```
