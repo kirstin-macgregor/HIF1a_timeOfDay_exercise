@@ -1,0 +1,189 @@
+---
+title: "HIF1a mice transcriptomics in response to time of day exercise"
+subtitle: "Differential expression analysis"
+author: "Kirstin MacGregor"
+date: "`r paste('Project start: January 04, 2023.', 'Last update:', format(Sys.time(), '%B %d, %Y'))`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_file = paste0(
+        xfun::sans_ext(input), '-', Sys.Date(), '.html'
+      ),
+      envir = globalenv()
+    )
+  })
+editor_options: 
+  chunk_output_type: console
+---
+<style>
+#TOC {
+  background: url("https://medarbetare.ki.se/sites/default/files/styles/article_full_width/public/qbank/ki_logo_liggande_exempel.jpg?itok=JTRhQLNk");
+  background-size: contain;
+  padding-top: 100px !important;
+  background-repeat: no-repeat;
+}
+</style>
+
+# Set up
+```{r setup, include=FALSE}
+source(here::here("./R/functions.R"))
+library(viridis)
+library(DESeq2)
+
+dir.create(here::here("./out"), showWarnings = FALSE)
+```
+
+# Data preparation
+```{r data prep}
+#load and tidy metadata
+meta <- readRDS(file= here::here(".././data-raw/meta_20230126.rda"))
+
+#load and tidy count data file
+load(file= here::here(".././data-raw/count_raw/counts.rda"))
+dat <- tidy_raw_counts_fun(counts)
+
+#clean up
+rm(counts)
+```
+
+# Sample exclusion
+
+* Sample "0156_44" has low coverage. I will exclude this sample from the metadata and raw data file for downstream analysis.
+```{r sample exclusion}
+meta <- meta |> dplyr::filter(id!= "0156_44")
+dat <- dat[,colnames(dat)!= "0156_44"]
+
+nrow(meta)== ncol(dat) #check number of samples are the same
+```
+
+# Differential expression analysis
+
+DESeq model parameters:
+* main effects of genotype, zt and exercise.
+* 3 way contrasts between relevant groups of genotype, time of day and exercise. 
+* adjust for sex.
+
+## Set up model
+```{r set up DE model, warning= FALSE, message= FALSE}
+#re-order row names in meta test to match column names in FPKM data frame
+meta <- meta[match(colnames(dat), meta$id),]
+all(colnames(dat)==meta$id) #check
+
+#Concatenate the variables exercise, zt and genotype into one variable for the DESeq model. 
+meta <- meta |> dplyr::mutate(genotype_zt_exercise = paste(genotype, zt, exercise, sep="_"),
+                       genotype_zt_exercise = forcats::as_factor(genotype_zt_exercise))
+# set up annotations
+ah <- AnnotationHub::AnnotationHub()
+  MouseEnsDb <- AnnotationHub::query(ah, c("EnsDb", "Mus musculus", "102"))[[1]]
+  annotations <- genes(MouseEnsDb, return.type = "data.frame")
+
+#set up DESeq2 model for 
+dds<- DESeq2::DESeqDataSetFromMatrix(countData = dat, colData = meta, design = ~ 0 + genotype_zt_exercise + sex)
+```
+
+# Run DE analysis
+```{r DE analysis, warning= FALSE, message= FALSE}
+dds <- DESeq2::DESeq(dds)
+
+#run minimal filtering
+keep <- rowSums(counts(dds) >= 5) >= 2
+dds <- dds[keep,]
+
+saveRDS(dds, here::here("./out/dds.rds"))
+```
+
+# Extract effects
+
+## Main effects
+```{r extract main effects, warning= FALSE, message= FALSE}
+main_effects <- list(sex = annotate_dat_fun(comp_name = "sex", main_effect= "sex",
+                                           results(dds, contrast= c(0, 0, 0, 0, 0, 0, 0, 0, 1))),
+                     genotype= annotate_dat_fun(comp_name = "genotype", main_effect= "genotype",
+                                                results(dds, contrast= c(-1/4, 1/4, -1/4, -1/4, 1/4, -1/4, 1/4, 1/4, 0))),
+                     exercise= annotate_dat_fun(comp_name = "exercise", main_effect= "exercise",
+                                                results(dds, contrast= c(1/4, -1/4, 1/4, -1/4, -1/4, -1/4, 1/4, 1/4, 0))),
+                     zt= annotate_dat_fun(comp_name = "zt", main_effect= "zt",
+                                          results(dds, contrast= c(1/4, 1/4, -1/4, 1/4, -1/4, -1/4, -1/4, 1/4, 0))))
+```
+
+## Exercise contrast
+```{r extract exercise contrast, warning= FALSE, message= FALSE}
+ex_contrasts <- list(zt3_wt= annotate_dat_fun(comp_name = "zt3_wt", main_effect= "exercise",
+                                                       results(dds, independentFiltering = T, c("genotype_zt_exercise", "wt_3_ex", "wt_3_sed"))),
+                     zt15_wt= annotate_dat_fun(comp_name = "zt15_wt", main_effect= "exercise",
+                                                        results(dds, independentFiltering = T, c("genotype_zt_exercise", "wt_15_ex", "wt_15_sed"))),
+                     zt3_ko=annotate_dat_fun(comp_name = "zt3_ko", main_effect= "exercise",
+                                                       results(dds, independentFiltering = T, c("genotype_zt_exercise", "ko_3_ex", "ko_3_sed"))), 
+                     zt15_ko= annotate_dat_fun(comp_name = "zt15_ko", main_effect= "exercise",
+                                                        results(dds, independentFiltering = T, c("genotype_zt_exercise", "ko_15_ex", "ko_15_sed"))))
+```
+
+## Genotype contrast
+```{r extract genotype contrast analysis, warning= FALSE, message= FALSE}
+genotype_contrasts <- list(zt3_ex= annotate_dat_fun(comp_name = "zt3_ex", main_effect= "genotype",
+                                                       results(dds, independentFiltering = T, c("genotype_zt_exercise", "ko_3_ex", "wt_3_ex"))),
+                     zt15_ex= annotate_dat_fun(comp_name = "zt15_ex", main_effect= "genotype",
+                                                        results(dds, independentFiltering = T, c("genotype_zt_exercise", "ko_15_ex", "wt_15_ex"))),
+                     zt3_sed=annotate_dat_fun(comp_name = "zt3_sed", main_effect= "genotype",
+                                                        results(dds, independentFiltering = T, c("genotype_zt_exercise", "ko_3_sed", "wt_3_sed"))), 
+                     zt15_sed= annotate_dat_fun(comp_name = "zt15_sed", main_effect= "genotype",
+                                                         results(dds, independentFiltering = T, c("genotype_zt_exercise", "ko_15_sed", "wt_15_sed"))))
+```
+
+## ZT contrast
+```{r extract ZT contrast, warning= FALSE, message= FALSE}
+zt_contrasts <- list(wt_sed=  annotate_dat_fun(comp_name = "wt_sed", main_effect= "zt",
+                                                 results(dds, independentFiltering = T, c("genotype_zt_exercise", "wt_15_sed", "wt_3_sed"))),
+                     wt_ex=  annotate_dat_fun(comp_name = "wt_ex", main_effect= "zt",
+                                                results(dds, independentFiltering = T, c("genotype_zt_exercise", "wt_15_ex", "wt_3_ex"))),
+                     ko_sed=annotate_dat_fun(comp_name = "ko_sed", main_effect= "zt",
+                                                 results(dds, independentFiltering = T, c("genotype_zt_exercise", "ko_15_sed", "ko_3_sed"))), 
+                     ko_ex= annotate_dat_fun(comp_name = "ko_ex", main_effect= "zt",
+                                                results(dds, independentFiltering = T, c("genotype_zt_exercise", "ko_15_ex", "ko_3_ex"))))
+```
+
+# Save output
+```{r save, warning= FALSE, message= FALSE}
+openxlsx::write.xlsx(lapply(main_effects, tidy_DE_output_for_saving_fun),
+                     file = here::here("./out/main_effects.xlsx"), keepNA= TRUE, na.string= "")
+openxlsx::write.xlsx(lapply(ex_contrasts, tidy_DE_output_for_saving_fun),
+                     file = here::here("./out/ex_vs_sed_contrasts.xlsx"), keepNA= TRUE, na.string= "")
+openxlsx::write.xlsx(lapply(genotype_contrasts, tidy_DE_output_for_saving_fun),
+                     file = here::here("./out/wt_vs_ko_contrasts.xlsx"), keepNA= TRUE, na.string= "")
+openxlsx::write.xlsx(lapply(zt_contrasts, tidy_DE_output_for_saving_fun),
+                     file = here::here("./out/zt3_vs_zt15_contrasts.xlsx"), keepNA= TRUE, na.string= "")
+
+DE_results <- list(main_effects = main_effects, ex_contrasts = ex_contrasts, genotype_contrasts= genotype_contrasts, zt_contrasts = zt_contrasts)
+
+saveRDS(DE_results, file=  here::here("./out/DE_results.rda"))
+```
+
+# Check model fit
+```{r check model fit}
+#dispersion estimates
+pdf(here::here("./out/disp_ests.pdf"))
+plotDispEsts(dds)
+dev.off()
+
+# P value distribution
+main_effects_pval_hist <- pval_hist_fun(data = do.call("rbind", main_effects), title ="main effects")
+genotype_contrasts_pval_hist <- pval_hist_fun(data = do.call("rbind", genotype_contrasts), title ="Genotype: wt vs KO")
+ex_contrasts_pval_hist <- pval_hist_fun(data = do.call("rbind", ex_contrasts), title ="Treatment: ex vs sed")
+zt_contrasts_pval_hist <- pval_hist_fun(data = do.call("rbind", zt_contrasts), title ="Time of Day: zt15 vs zt3")
+
+ggplot2::ggplot(filename= "pval_hist_main_effects.pdf", plot = main_effects_pval_hist, path = here::here("./out"), width= 7, height= 7)
+ggplot2::ggplot(filename= "pval_hist_genotype.pdf", plot= genotype_contrasts_pval_hist, path = here::here("./out"), width= 7, height= 7)
+ggplot2::ggplot(filename= "pval_hist_exercise.pdf", plot= ex_contrasts_pval_hist, path = here::here("./out"), width= 7, height= 7)
+ggplot2::ggplot(filename = "pval_hist_zt.pdf", plot = zt_contrasts_pval_hist, path = here::here("./out"), width= 7, height= 7)
+```
+
+# Session info
+```{r session info}
+sessionInfo()
+```
+
