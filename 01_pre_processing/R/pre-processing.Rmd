@@ -1,0 +1,335 @@
+---
+title: "HIF1a mice transcriptomics in response to time of day exercise"
+subtitle: "Pre-processing"
+author: "Kirstin MacGregor"
+date: "`r paste('Project start: January 04, 2023.', 'Last update:', format(Sys.time(), '%B %d, %Y'))`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_file = paste0(
+        xfun::sans_ext(input), '-', Sys.Date(), '.html'
+      ),
+      envir = globalenv()
+    )
+  })
+editor_options: 
+  chunk_output_type: console
+---
+
+<style>
+#TOC {
+  background: url("https://medarbetare.ki.se/sites/default/files/styles/article_full_width/public/qbank/ki_logo_liggande_exempel.jpg?itok=JTRhQLNk");
+  background-size: contain;
+  padding-top: 100px !important;
+  background-repeat: no-repeat;
+}
+</style>
+
+
+# Set up
+```{r setup, include=FALSE}
+source(here::here("./R/functions.R"))
+library(viridis)
+library(DESeq2)
+
+dir.create(here::here("./out/raw"))
+dir.create(here::here("./out/filt"))
+```
+
+
+# Data preparation
+```{r data prep}
+#load and tidy metadata
+meta <- readRDS(file= here::here(".././data-raw/meta_20230126.rda"))
+
+#load and tidy count data file
+load(file= here::here(".././data-raw/count_raw/counts.rda"))
+
+dat <- tidy_raw_counts_fun(counts)
+
+#clean up
+rm(counts)
+```
+
+# Save raw counts as .txt file
+```{r}
+write.table(dat, here::here("../data-raw/count_raw/counts.txt"), sep = ";")
+write.table(meta, here::here("../data-raw/count_raw/meta.txt"), sep = ";")
+```
+
+# Sequencing depth statistics
+```{r}
+summary <- colSums(dat) |> 
+  as.data.frame() |> 
+  dplyr::summarise(mean = mean(`colSums(dat)`),
+                   sd = sd(`colSums(dat)`),
+                   min = min(`colSums(dat)`),
+                   max = max(`colSums(dat)`))
+
+dat <- dat[,colnames(dat)!= "0156_44"]
+
+summary <- colSums(dat) |> 
+  as.data.frame() |> 
+  dplyr::summarise(mean = mean(`colSums(dat)`),
+                   sd = sd(`colSums(dat)`),
+                   min = min(`colSums(dat)`),
+                   max = max(`colSums(dat)`))
+```
+
+
+# Quality control
+
+## Raw data
+```{r QC, message=FALSE, warning= FALSE}
+#make dataframes for plots
+sum_counts <- sum_counts_fun(dat)
+logCounts <- logCounts_fun(data = dat)
+vst_counts <- DESeq2::vst(as.matrix(dat))
+dat_long <- dat_long_fun(dat)
+vst_counts_long <- dat_long_fun(vst_counts)
+
+# histogram
+raw_counts_histogram <- histo_fun(data = sum_counts, var = sum_counts$V1, bins = 15, title = "raw counts histogram")
+
+#sum counts bar plot
+sum_counts_barplot <- sum_count_plot_fun(sum_counts)
+
+#boxplot
+boxplot_raw_counts<- boxplot_function(data= dat_long, xvar= dat_long$id, yvar= dat_long$values, 
+                                      title= "raw count boxplot", ylab= "counts", xlab= "sample")
+
+#mean vs sd per gene
+pdf(here::here("./out/filt/sd_vs_mean_raw_counts_plot.pdf"))
+plot(matrixStats::rowMeans2(as.matrix(dat)), matrixStats::rowSds(as.matrix(dat)),
+     main='Raw counts: sd vs mean', xlim=c(0,10000), ylim=c(0,5000))
+dev.off()
+
+# log 2 count boxplot
+boxplot_log2_raw_counts<- boxplot_function(data= dat_long, x= dat_long$id, y= log2(dat_long$values), 
+                                           title= "log2 count boxplot", ylab= "log2(counts)", xlab= "sample")
+boxplot_log2_raw_counts
+
+# vst boxplot
+boxplot_vst_norn_counts<- boxplot_function(data= vst_counts_long, x= vst_counts_long$id, y= vst_counts_long$values,
+                                           title= "vst normalised count boxplot", ylab= "vst normalised counts", xlab= "sample")
+
+#save plots
+ggplot2::ggsave(plot = raw_counts_histogram, filename = "raw_counts_histogram.pdf", path = here::here("./out/raw/"), height = 7, width= 7)
+ggplot2::ggsave(plot = sum_counts_barplot, filename = "sum_counts_barplot.pdf", path = here::here("./out/raw/"), height = 7, width= 7)
+ggplot2::ggsave(plot = boxplot_raw_counts, filename = "boxplot_raw_counts.pdf", path = here::here("./out/raw/"), height = 7, width= 7)
+ggplot2::ggsave(plot = boxplot_log2_raw_counts, filename = "boxplot_log2_raw_counts.pdf", path = here::here("./out/raw/"), height = 7, width= 7)
+ggplot2::ggsave(plot = boxplot_vst_norn_counts, filename = "boxplot_vst_norn_counts.pdf", path = here::here("./out/raw/"), height = 7, width= 7)
+
+#clean up
+rm(sum_counts, logCounts, vst_counts, dat_long, vst_counts_long, raw_counts_histogram, sum_counts_barplot,
+   boxplot_raw_counts, boxplot_log2_raw_counts, boxplot_vst_norn_counts)
+```
+
+## Data filtered by lowly expressed genes 
+```{r QC-filtered data, message=FALSE, warning= FALSE}
+keep <- rowSums(dat) > 1
+filt_dat <- dat[keep, ]
+
+#make dataframes for plots
+sum_counts <- sum_counts_fun(filt_dat)
+logCounts <- logCounts_fun(data = filt_dat)
+vst_counts <- DESeq2::vst(as.matrix(filt_dat))
+dat_long <- dat_long_fun(filt_dat)
+vst_counts_long <- dat_long_fun(vst_counts)
+
+# histogram
+raw_counts_histogram <- histo_fun(data = sum_counts, var = sum_counts$V1, bins = 15, title = "raw counts histogram")
+
+#sum counts bar plot
+sum_counts_barplot <- sum_count_plot_fun(sum_counts)
+
+#boxplot
+boxplot_raw_counts<- boxplot_function(data= dat_long, xvar= dat_long$id, yvar= dat_long$values,
+                                      title= "raw count boxplot", ylab= "counts", xlab= "sample")
+
+#mean vs sd per gene
+pdf(here::here("./out/filt/sd_vs_mean_raw_counts_plot.pdf"))
+plot(matrixStats::rowMeans2(as.matrix(filt_dat)), matrixStats::rowSds(as.matrix(filt_dat)),
+     main='Raw counts: sd vs mean', xlim=c(0,10000), ylim=c(0,5000))
+dev.off()
+
+# log 2 count boxplot
+boxplot_log2_raw_counts<- boxplot_function(data= dat_long, xvar= dat_long$id, yvar= log2(dat_long$values),
+                                           title= "log2 count boxplot", ylab= "log2(counts)", xlab= "sample")
+
+
+# vst boxplot
+boxplot_vst_norn_counts<- boxplot_function(data= vst_counts_long, xvar= vst_counts_long$id, yvar= vst_counts_long$values,
+                                           title= "vst normalised count boxplot", ylab= "vst normalised counts", xlab= "sample")
+boxplot_vst_norn_counts
+
+#save plots
+ggplot2::ggsave(plot = raw_counts_histogram, filename = "raw_counts_histogram.pdf", path = here::here("./out/filt/"), height = 7, width= 7)
+ggplot2::ggsave(plot = sum_counts_barplot, filename = "sum_counts_barplot.pdf", path = here::here("./out/filt/"), height = 7, width= 7)
+ggplot2::ggsave(plot = boxplot_raw_counts, filename = "boxplot_raw_counts.pdf", path = here::here("./out/filt/"), height = 7, width= 7)
+ggplot2::ggsave(plot = boxplot_log2_raw_counts, filename = "boxplot_log2_raw_counts.pdf", path = here::here("./out/filt/"), height = 7, width= 7)
+ggplot2::ggsave(plot = boxplot_vst_norn_counts, filename = "boxplot_vst_norn_counts.pdf", path = here::here("./out/filt/"), height = 7, width= 7)
+
+
+#clean up
+rm(keep, filt_dat, sum_counts, logCounts, vst_counts, dat_long, vst_counts_long, raw_counts_histogram, sum_counts_barplot,
+   boxplot_raw_counts, boxplot_log2_raw_counts, boxplot_vst_norn_counts)
+```
+
+# Sample exclusion:
+
+* sample "0156_44" has low coverage. I will exclude this sample from the metadata and raw data file for downstream analysis.
+```{r sample exclusion, message=FALSE, warning= FALSE}
+meta <- meta |> dplyr::filter(id!= "0156_44")
+dat <- dat[,colnames(dat)!= "0156_44"]
+nrow(meta)== ncol(dat) #check number of samples are the same
+
+#check boxplot
+keep <- rowSums(dat) > 1 #filt dat for plotting
+filt_dat <- dat[keep, ]
+vst_counts <- DESeq2::vst(as.matrix(filt_dat))
+dat_long <- dat_long_fun(filt_dat)
+vst_counts_long <- dat_long_fun(vst_counts)
+
+boxplot_vst_norn_counts_sample_excl<- boxplot_function(data= vst_counts_long, xvar= vst_counts_long$id, yvar= vst_counts_long$values,
+                                           title= "vst normalised count boxplot", ylab= "vst normalised counts", xlab= "sample")
+
+ggplot2::ggsave(plot = boxplot_vst_norn_counts_sample_excl, filename = "boxplot_vst_norn_counts_sample_excl.pdf", path = here::here("./out/filt/"), height = 7, width = 5)
+
+boxplot_vst_norn_counts_sample_excl
+```
+
+# Create DESeq object for QC analysis
+```{r Create DESeq object, message=FALSE, warning= FALSE}
+library(DESeq2)
+
+#re-order row names in meta test to match column names in FPKM data frame
+meta <- meta[match(colnames(dat), meta$id),]
+all(colnames(dat)==meta$id) #check 
+
+#construct DESeq dataset object (DDS) from matrix of counts and meta data table
+dds <- DESeq2::DESeqDataSetFromMatrix(countData = dat,
+                                      colData = meta,
+                                      design = ~sex + genotype + zt + exercise)
+
+#Pre filter dataset:
+#Remove genes with no counts or only 1  count across all samples, this will incerase the speed of the functions.
+keep <- rowSums(counts(dds) >= 1) >= 4
+dds <- dds[keep,]
+```
+
+
+# Exploratory data analysis and visualisation
+
+##  Euclidian distances between samples
+```{r heatmap Euclidian samples distances, message=FALSE, warning= FALSE}
+# normalise count data using rlog.
+rld <- DESeq2::rlog(dds, blind = FALSE)
+
+# calculate sample distances
+sampleDists <- dist(t(assay(rld)))
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <- paste( rld$id, rld$exercise, rld$genotype, sep="-" )
+colnames(sampleDistMatrix) <- NULL 
+
+# create heatmap
+ha1 <- ComplexHeatmap::HeatmapAnnotation(
+  df = colData(dds)[, c("genotype", "exercise")],
+  col = list(
+    genotype = c("ko" = "maroon", "wt" = "salmon"),
+    exercise = c("ex" = "lightblue", "sed" = "darkblue")
+  )
+)
+
+pdf(here::here("./out/filt/heatmap_sample_dist.pdf"), width= 10, height= 12)
+ComplexHeatmap::Heatmap(sampleDistMatrix,
+  name = "poisson distance",
+  show_row_name = TRUE,
+  show_column_names = FALSE,
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  col=viridis::viridis(100),
+  rect_gp = grid::gpar(col = "lightgrey", lwd = 0.3),
+  top_annotation = ha1
+)
+dev.off()
+
+
+pdf(here::here("./out/filt/heatmap_sample_dist_cluster.pdf"), width= 10, height= 12)
+ComplexHeatmap::Heatmap(sampleDistMatrix,
+  name = "poisson distance",
+  show_row_name = TRUE,
+  show_column_names = FALSE,
+  cluster_rows = FALSE,
+  cluster_columns = TRUE,
+  col=viridis::viridis(100),
+  rect_gp = grid::gpar(col = "lightgrey", lwd = 0.3),
+  top_annotation = ha1
+)
+dev.off()
+
+#clean up
+rm(keep, sampleDistMatrix, ha1)
+```
+Samples are not clustering row-wise by sample distance. This similar to the PCA plots.
+
+## Unsupervised clustering by Principle component analysis (PCA)
+
+* Assess how the samples cluster and if there are any experimental causes that contribute to sample similarities.
+* PCA preformed on normalised data using regularized-logarithm transformation (rlog) from DESeq2
+```{r PCA plots, warning= FALSE}
+dir.create(here::here("./out/filt/PCA_plots"))
+
+#tidy meta for plotting
+meta_PCA <- meta_dat_tidy_fun(meta)
+
+#create data frames with sample distances
+var_PCA <- var_PCA_fun(assay(rld))
+pca_dat <- pca_dat_fun(assay(rld), meta_PCA)
+
+#Scree plot
+scree_plot <- scree_plot_fun(assay(rld))
+plot_save_function("scree_plot.png",  scree_plot,  here::here('./out/filt/PCA_plots'), width=7, height=4)
+
+#PCA plot labels
+PC1_PC2_plots_label <-plot_PC1_PC2_label_fun(data=pca_dat)
+PC2_PC3_plots_label <-plot_PC2_PC3_label_fun(data=pca_dat)
+
+# PCA plots
+PC1_PC2_plots <-plot_PC1_PC2_fun(data=pca_dat)
+PC2_PC3_plots <-plot_PC2_PC3_fun(data=pca_dat)
+
+PC1_PC2_plots$PC1_PC2_genotype
+PC1_PC2_plots$PC1_PC2_zt
+PC1_PC2_plots$PC1_PC2_exercise
+PC1_PC2_plots$PC1_PC2_sex
+
+#save plots
+plot_list_save_function(PC1_PC2_plots,  save_chr= NULL, here::here('./out/filt/PCA_plots'), width=7, height=4)
+plot_list_save_function(PC2_PC3_plots,  save_chr= NULL, here::here('./out/filt/PCA_plots'), width=7, height=4)
+ggplot2::ggsave(filename = "PC1_PC2_labels_plot.png", plot = PC1_PC2_plots_label, path = here::here('./out/filt/PCA_plots'), width= 7, height= 4)
+ggplot2::ggsave(filename = "PC2_PC3_labels_plot.png", plot = PC2_PC3_plots_label, path = here::here('./out/filt/PCA_plots'), width= 7, height= 4)
+
+#clean up
+rm(meta_PCA, var_PCA, pca_dat, scree_plot, PC1_PC2_plots_label, PC2_PC3_plots_label, PC1_PC2_plots, PC2_PC3_plots, rld)
+```
+Experimental design clustering
+
+* Samples cluster by sex with females pulling to the down on of PC2 (12.62 % variance explained).
+* Cannot identify PC1
+* Samples appear to cluster by genotype on PC3 ( 4 % variance explained). Looks to be driven by wt sedentary mice pulling down on PC3 rather than wt exercised mice.
+* There is no clear clustering related to zt.
+
+Confounder clustering
+
+* Samples do not cluster by set or batch. This indicates we do not need to be concerned about any confounding effects of the experimental design. 
+
+# Session info
+```{r}
+sessionInfo()
+```
